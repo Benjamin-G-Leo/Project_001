@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LPP Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#111827',
+                            card: '#1f2937',
+                            border: '#374151',
+                            text: '#f3f4f6',
+                            muted: '#9ca3af'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+        <style>
+                .input-dark {
+            @apply bg-gray-100 border-dark-border text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+        }
+        .btn-secondary {
+            @apply bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+        }
+        .btn-danger {
+            @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #111827 50%, #1e293b 100%);
+        }
+    </style></head>
+<body class="gradient-bg text-dark-text min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold tracking-tight">Linear Programming Problem Solver</h1>
+            <p class="text-dark-muted mt-2">2-Variable Graphical Method</p>
+        </header>
+
+        <main class="space-y-6">
+            <!-- Objective Function -->
+            <section class="bg-dark-card rounded-xl p-6 border border-dark-border">
+                <h2 class="text-xl font-semibold mb-4">Objective Function</h2>
+                <div class="flex flex-wrap items-center gap-4">
+                    <label class="flex items-center gap-2">
+                        <select id="obj-type" class="input-dark px-3 py-2 rounded-lg w-auto">
+                            <option value="max">Maximize</option>
+                            <option value="min">Minimize</option>
+                        </select>
+                    </label>
+                    <span class="text-dark-muted">Z =</span>
+                    <input type="number" id="c1" value="3" step="any" class="input-dark w-20 px-3 py-2 rounded-lg" placeholder="c1">
+                    <span class="text-dark-muted">X +</span>
+                    <input type="number" id="c2" value="2" step="any" class="input-dark w-20 px-3 py-2 rounded-lg" placeholder="c2">
+                    <span class="text-dark-muted">Y</span>
+                </div>
+            </section>
+
+            <!-- Constraints -->
+            <section class="bg-dark-card rounded-xl p-6 border border-dark-border">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">Subject to: Constraints</h2>
+                    <button id="add-constraint" class="btn-secondary text-sm py-1 px-3">+ Add Constraint</button>
+                </div>
+                <div id="constraints-container" class="space-y-3">
+                    <!-- Constraint rows inserted here via JavaScript -->
+                </div>
+            </section>
+
+                        <!-- Solve Button -->
+                        <div class="text-center">
+                <div class="bg-blue-600/10 border border-blue-600/30 rounded-xl p-4 hover:bg-blue-600/15 transition-colors">
+                    <button id="solve-btn" class="btn-primary text-lg px-8 py-3 w-full">Solve LPP</button>
+                    <p class="text-sm text-dark-muted mt-1">Click to solve using the Simplex method</p>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <section id="results" class="bg-dark-card rounded-xl p-6 border border-dark-border hidden">
+                <h2 class="text-xl font-semibold mb-4">Solution</h2>
+                <div id="solution-content" class="space-y-2 font-mono text-lg"></div>
+                <p id="status-msg" class="mt-4 text-dark-muted"></p>
+            </section>
+
+            <!-- Graph -->
+            <section id="graph-section" class="bg-dark-card rounded-xl p-6 border border-dark-border hidden">
+                <h2 class="text-xl font-semibold mb-4">Feasible Region & Optimal Point</h2>
+                <div class="aspect-video md:aspect-[4/3]">
+                    <canvas id="lpp-chart"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+        <script>
+        // State
+        let chartInstance = null;
+
+        // Simplex Method Solver
+        const SIMP_EPS = 1e-9;
+
+        function runSimplex(tableau, m, rc, basis, skipCols) {
+            while (true) {
+                let pc = -1, best = -SIMP_EPS;
+                for (let j = 0; j < rc; j++) {
+                    if (skipCols && skipCols.includes(j)) continue;
+                    if (tableau[m][j] < best) { best = tableau[m][j]; pc = j; }
+                }
+                if (pc === -1) break;
+                let pr = -1, mr = Infinity;
+                for (let i = 0; i < m; i++) {
+                    if (tableau[i][pc] > SIMP_EPS) {
+                        const r = tableau[i][rc] / tableau[i][pc];
+                        if (r < mr) { mr = r; pr = i; }
+                    }
+                }
+                if (pr === -1) return { unbounded: true };
+                basis[pr] = pc;
+                const pv = tableau[pr][pc];
+                for (let j = 0; j <= rc; j++) tableau[pr][j] /= pv;
+                for (let i = 0; i <= m; i++) {
+                    if (i !== pr) { const f = tableau[i][pc]; for (let j = 0; j <= rc; j++) tableau[i][j] -= f * tableau[pr][j]; }
+                }
+            }
+            return { unbounded: false };
+        }
+
+        function solveSimplex(cInput, A, b, ops, objType) {
+            let c = cInput.slice();
+            if (objType === 'min') c = c.map(x => -x);
+            const m = A.length, n = c.length;
+            let nV = n;
+            let basis = [], art = [], tableau = [];
+
+            for (let i = 0; i < m; i++) {
+                let row = new Array(n).fill(0);
+                for (let j = 0; j < A[i].length; j++) row[j] = A[i][j];
+                if (b[i] < -SIMP_EPS) {
+                    for (let j = 0; j < n; j++) row[j] = -row[j];
+                    b[i] = -b[i];
+                    ops[i] = ops[i] === '<=' ? '>=' : ops[i] === '>=' ? '<=' : '=';
+                }
+                while (row.length < nV) row.push(0);
+                if (ops[i] === '<=') { row.push(1); basis.push(nV++); }
+                else if (ops[i] === '>=') { row.push(-1); row.push(1); basis.push(nV + 1); art.push(nV + 1); nV += 2; }
+                else { row.push(1); basis.push(nV); art.push(nV); nV++; }
+                tableau.push(row);
+            }
+            for (let i = 0; i < m; i++) {
+                while (tableau[i].length < nV) tableau[i].push(0);
+                tableau[i][nV] = b[i];
+            }
+            const RHS = nV;
+
+            let p1obj = new Array(nV + 1).fill(0);
+            for (const av of art) p1obj[av] = 1;
+            for (let i = 0; i < m; i++) { if (art.includes(basis[i])) for (let j = 0; j <= RHS; j++) p1obj[j] -= tableau[i][j]; }
+            tableau.push(p1obj);
+
+            let r1 = runSimplex(tableau, m, RHS, basis);
+            if (r1.unbounded) return { status: 'unbounded', msg: 'Unbounded' };
+            if (tableau[m][RHS] < -SIMP_EPS) return { status: 'infeasible', msg: 'Infeasible' };
+
+            let obj = new Array(nV + 1).fill(0);
+            for (let j = 0; j < n; j++) obj[j] = -c[j];
+            for (let i = 0; i < m; i++) { const bi = basis[i]; if (obj[bi] !== 0) { const f = obj[bi]; for (let j = 0; j <= RHS; j++) obj[j] -= f * tableau[i][j]; } }
+            for (const av of art) obj[av] = 0;
+            tableau[m] = obj;
+
+            let r2 = runSimplex(tableau, m, RHS, basis, art);
+            if (r2.unbounded) return { status: 'unbounded', msg: 'Unbounded' };
+
+            let sol = new Array(n).fill(0);
+            for (let i = 0; i < m; i++) { if (basis[i] < n) sol[basis[i]] = tableau[i][RHS]; }
+            let z = 0; for (let j = 0; j < n; j++) z += cInput[j] * sol[j];
+            return { status: 'optimal', solution: sol, z: z, msg: 'Optimal solution found.' };
+        }
+
+
+        // Helper: safe number parse
+        function num(v) {
+            const n = parseFloat(v);
+            return isNaN(n) ? null : n;
+        }
+
+        // Create constraint row HTML
+        function createConstraintRow(index = Date.now()) {
+            return `
+                <div class="constraint-row flex flex-wrap items-center gap-2 border-t border-dark-border pt-2" data-index="${index}">
+                    <span class="text-dark-muted text-sm whitespace-nowrap">X:</span>
+                    <input type="number" class="input-dark w-20 px-3 py-2 rounded-lg" placeholder="a₁" data-field="a" step="any">
+                    <span class="text-dark-muted text-sm whitespace-nowrap">Y:</span>
+                    <input type="number" class="input-dark w-20 px-3 py-2 rounded-lg" placeholder="b₁" data-field="b" step="any">
+                    <select class="input-dark px-2 py-2 rounded-lg w-auto text-sm" data-field="op">
+                        <option value="<=">≤</option>
+                        <option value=">=">≥</option>
+                        <option value="=">=</option>
+                    </select>
+                    <span class="text-dark-muted text-sm">=</span>
+                    <input type="number" class="input-dark w-20 px-3 py-2 rounded-lg" placeholder="c" data-field="c" step="any">
+                    ${index === 0 ? '' : '<button type="button" class="btn-danger text-xs w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">×</button>'}
+                </div>
+            `;
+        }
+
+                // Parse all inputs
+        function parseInputs() {
+            const c1 = num(document.getElementById('c1').value);
+            const c2 = num(document.getElementById('c2').value);
+            const objType = document.getElementById('obj-type').value;
+            if (c1 === null || c2 === null) return null;
+
+            const constraints = [];
+            document.querySelectorAll('.constraint-row').forEach(row => {
+                const a = num(row.querySelector('[data-field="a"]').value);
+                const b = num(row.querySelector('[data-field="b"]').value);
+                const op = row.querySelector('[data-field="op"]').value;
+                const c = num(row.querySelector('[data-field="c"]').value);
+                if (a !== null && b !== null && c !== null) {
+                    constraints.push({ a, b, op, c });
+                }
+            });
+            return { c1, c2, objType, constraints };
+        }
+
+        // Graph plotting with Chart.js
+        function plotGraph(input, solution) {
+            const { constraints } = input;
+            const canvas = document.getElementById('lpp-chart');
+            if (chartInstance) chartInstance.destroy();
+
+            const EPS = 1e-9;
+            const datasets = [];
+
+            // Plot each constraint line
+            constraints.forEach((row, idx) => {
+                const pts = [];
+                if (Math.abs(row.b) > EPS) {
+                    pts.push({ x: 0, y: row.c / row.b });
+                    pts.push({ x: 100, y: (row.c - row.a * 100) / row.b });
+                } else if (Math.abs(row.a) > EPS) {
+                    pts.push({ x: row.c / row.a, y: 0 });
+                    pts.push({ x: row.c / row.a, y: 100 });
+                }
+                if (pts.length === 2) {
+                    datasets.push({
+                        type: 'line',
+                        label: `C${idx + 1}`,
+                        data: pts,
+                        borderColor: 'rgba(156,163,175,0.6)',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0
+                    });
+                }
+            });
+
+            // Plot feasible region polygon
+            if (solution.status === 'optimal') {
+                const lines = [{ a: 0, b: 1, c: 0 }, { a: 1, b: 0, c: 0 }];
+                constraints.forEach(r => lines.push({ a: r.a, b: r.b, c: r.c }));
+                const allPts = [];
+                for (let i = 0; i < lines.length; i++) {
+                    for (let j = i + 1; j < lines.length; j++) {
+                        const det = lines[i].a * lines[j].b - lines[j].a * lines[i].b;
+                        if (Math.abs(det) > EPS) {
+                            const x = (lines[i].c * lines[j].b - lines[j].c * lines[i].b) / det;
+                            const y = (lines[i].a * lines[j].c - lines[j].a * lines[i].c) / det;
+                            allPts.push({ x, y });
+                        }
+                    }
+                }
+                const feasiblePts = allPts.filter(p => {
+                    if (p.x < -EPS || p.y < -EPS) return false;
+                    for (const r of constraints) {
+                        const v = r.a * p.x + r.b * p.y;
+                        if (r.op === '<=' && v > r.c + EPS) return false;
+                        if (r.op === '>=' && v < r.c - EPS) return false;
+                    }
+                    return true;
+                });
+                                if (feasiblePts.length > 1) {
+                    feasiblePts.sort((a, b) => a.x - b.x || a.y - b.y);
+                    datasets.push({
+                        type: 'line',
+                        data: feasiblePts.map(p => ({ x: p.x, y: p.y })),
+                        backgroundColor: 'rgba(59,130,246,0.15)',
+                        borderColor: 'rgba(59,130,246,0.4)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0,
+                        pointRadius: 3
+                    });
+                }
+            }
+
+                        // Plot optimal point
+            if (solution.status === 'optimal') {
+                const optX = solution.solution ? (solution.solution[0] || 0) : solution.x;
+                const optY = solution.solution ? (solution.solution[1] || 0) : solution.y;
+                datasets.push({
+                    type: 'scatter',
+                    label: 'Optimal',
+                    data: [{ x: optX, y: optY }],
+                    backgroundColor: '#ef4444',
+                    borderColor: '#ffffff',
+                    pointRadius: 8,
+                    pointStyle: 'circle'
+                });
+            }
+
+            // Determine axis range
+            let maxX = 10, maxY = 10;
+            constraints.forEach(r => {
+                if (Math.abs(r.a) > EPS) maxX = Math.max(maxX, r.c / Math.abs(r.a) + 2);
+                if (Math.abs(r.b) > EPS) maxY = Math.max(maxY, r.c / Math.abs(r.b) + 2);
+            });
+
+            chartInstance = new Chart(canvas, {
+                type: 'scatter',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'X' }, min: 0, max: maxX, grid: { color: 'rgba(75,85,99,0.3)' }, ticks: { color: '#9ca3af' } },
+                        y: { type: 'linear', title: { display: true, text: 'Y' }, min: 0, max: maxY, grid: { color: 'rgba(75,85,99,0.3)' }, ticks: { color: '#9ca3af' } }
+                    },
+                    plugins: { legend: { labels: { color: '#9ca3af' } } }
+                }
+                        });
+        }
+
+        // App initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('constraints-container');
+            container.innerHTML = createConstraintRow(0);
+
+            document.getElementById('add-constraint').addEventListener('click', function() {
+                container.insertAdjacentHTML('beforeend', createConstraintRow(Date.now()));
+            });
+
+            container.addEventListener('click', function(e) {
+                if (e.target.classList.contains('btn-danger')) {
+                    const row = e.target.closest('.constraint-row');
+                    if (container.children.length > 1) row.remove();
+                }
+            });
+
+                        document.getElementById('solve-btn').addEventListener('click', function() {
+                const input = parseInputs();
+                if (!input || input.constraints.length === 0) {
+                    document.getElementById('status-msg').textContent = 'Please enter valid coefficients.';
+                    return;
+                }
+                // Use Simplex method solver
+                const cInput = [input.c1, input.c2];
+                const A = input.constraints.map(c => [c.a, c.b]);
+                const b = input.constraints.map(c => c.c);
+                const ops = input.constraints.map(c => c.op);
+                const result = solveSimplex(cInput, A, b, ops, input.objType);
+
+                const resultsSection = document.getElementById('results');
+                const solutionContent = document.getElementById('solution-content');
+                const statusMsg = document.getElementById('status-msg');
+                const graphSection = document.getElementById('graph-section');
+
+                resultsSection.classList.remove('hidden');
+                graphSection.classList.remove('hidden');
+
+                if (result.status === 'optimal') {
+                    const x = result.solution[0] || 0;
+                    const y = result.solution[1] || 0;
+                    solutionContent.innerHTML = `
+                        <p>X = ${x.toFixed(4)}</p>
+                        <p>Y = ${y.toFixed(4)}</p>
+                        <p>Z = ${result.z.toFixed(4)}</p>
+                    `;
+                    statusMsg.textContent = result.msg;
+                    plotGraph(input, result);
+                } else if (result.status === 'infeasible') {
+                    solutionContent.innerHTML = '<p>No feasible solution exists.</p>';
+                    statusMsg.textContent = result.msg;
+                    graphSection.classList.add('hidden');
+                } else {
+                    solutionContent.innerHTML = `<p>Error: ${result.msg}</p>`;
+                    statusMsg.textContent = 'Check console for details.';
+                    graphSection.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
