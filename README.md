@@ -4,7 +4,9 @@ A web-based tool for solving Linear Programming Problems (LPP) using the **Simpl
 
 ## 🔗 Live Web App
 
-Local development server: [http://127.0.0.1:5500/index.html](http://127.0.0.1:5500/index.html)
+**Local development:** [http://127.0.0.1:5500/index.html](http://127.0.0.1:5500/index.html)
+
+**Online:** [https://benjamin-g-leo.github.io/Project_001/](https://benjamin-g-leo.github.io/Project_001/)
 
 Or open directly: `index.html` in any modern browser
 
